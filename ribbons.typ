@@ -76,7 +76,8 @@
 
 
 #let preprocess-data = (
-	data
+	data,
+	aliases
 ) => {
 	// Add nodes that defined implicitly by being a target of an edge
 	assert(type(data) == dictionary, message: "Expected a dictionary")
@@ -101,6 +102,15 @@
 	for (node-id, properties) in data {
 		for (to, size) in properties.edges {
 			data.at(to).from-edges.insert(node-id, size)
+		}
+	}
+	// Add id (same as key) and name (alias | id)
+	for (node-id, properties) in data {
+		data.at(node-id).insert("id", node-id)
+		if (aliases.at(node-id, default: none) != none) {
+			data.at(node-id).insert("name", aliases.at(node-id))
+		} else {
+			data.at(node-id).insert("name", node-id)
 		}
 	}
 
@@ -277,14 +287,8 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 			for (node-id, properties) in nodes {
 				let (x, y, width, height) = properties
 				rect((x - width/2, y - height/2), (x + width/2, y + height/2), fill: properties.color, stroke: none)
-				// forces
-				// let force = properties.at("force", default: 0)
-				// if (force != 0) {
-				// 	let sign = if (force > 0) { 1 } else { -1 }
-				// 	let len = calc.min(calc.abs(force), 1)
-				// 	line((x, y), (x, y + len * sign), stroke: red, stroke-width: 0.05, end-arrow: (size: 0.1, angle: 20))
-				// }
-				content((x, y), text(node-id, size: 8pt))
+				
+				content((x, y), text(properties.name, size: 8pt))
 
 				// ribbons
 				for (to-node-id, edge-size) in properties.edges {
@@ -298,18 +302,18 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 
 					let ribbon-width = calc.min(top-left.at(1) - bottom-left.at(1), top-right.at(1) - bottom-right.at(1))
 
-					// TODO: Fine tune bezier control points
-					let bezier-top-control-1 = point-translate(point-mix(top-left, top-right, 0.33), (0, ribbon-width * 0.15))
-					// let bezier-top-control-2 = point-translate(point-mix(top-left, top-right, 0.5), (0, -ribbon-width * 0.1))
-					let bezier-bottom-control-1 = point-translate(point-mix(bottom-left, bottom-right, 0.33), (0, ribbon-width * 0.15))
-					// let bezier-bottom-control-2 = point-translate(point-mix(bottom-left, bottom-right, 0.5), (0, -ribbon-width * 0.1))
+					let curve-factor = 0.3
+					let bezier-top-control-1 = point-translate(top-left, (curve-factor * (top-right.at(0) - top-left.at(0)), 0))
+					let bezier-top-control-2 = point-translate(top-right, (-curve-factor * (top-right.at(0) - top-left.at(0)), 0))
+					let bezier-bottom-control-1 = point-translate(bottom-left, (curve-factor * (bottom-right.at(0) - bottom-left.at(0)), 0))
+					let bezier-bottom-control-2 = point-translate(bottom-right, (-curve-factor * (bottom-right.at(0) - bottom-left.at(0)), 0))
 					merge-path(
 						fill: ribbon-colorizer(properties.color, to-properties.color, node-id, to-node-id),
 						stroke: none,
 						{
-							bezier(top-left, top-right, bezier-top-control-1)
+							bezier(top-left, top-right, bezier-top-control-1, bezier-top-control-2)
 							line(top-right, bottom-right)
-							bezier(bottom-right, bottom-left, bezier-bottom-control-1)
+							bezier(bottom-right, bottom-left, bezier-bottom-control-2, bezier-bottom-control-1)
 							line(bottom-left, top-left)
 						}
 					)
@@ -352,11 +356,12 @@ Ribbon colorizers
 
 #let sankey = (
 	data,
+	aliases: (:),
 	layout: auto-linear-layout(),
 	tinter: layer-tinter(),
-	ribbon-color: ribbon-gradient-from-to()
+	ribbon-color: ribbon-from-color()
 ) => {
-	let nodes = preprocess-data(data)
+	let nodes = preprocess-data(data, aliases)
 	let (layouter, drawer) = layout
 	nodes = layouter(nodes)
 	nodes = tinter(nodes)
@@ -462,5 +467,15 @@ Ribbon colorizers
 		"A": ("B": 4, "C": 9, "D": 4),
 		"B": ("E": 2, "F": 2),
 		"E": ("G": 1, "H": 1)
+	),
+	aliases: (
+		"A": "meow"
 	)
 )
+#cetz.canvas({
+	import cetz.draw: *
+	let (a, b, c, d) = ((0, 0), (2, 1), (.8, 0), (1.2, 1))
+	line(a, c, d, b, stroke: gray)
+	bezier(a, b, c, d)
+})
+			
