@@ -1,4 +1,5 @@
 #import "@preview/cetz:0.4.2"
+#import "./utils.typ": *
 
 #let topo-sort = (
 	nodes,
@@ -124,6 +125,37 @@
 }
 
 
+/*
+A Palette is an array of colours
+A Tinter returns a function, Nodes -> Palette -> Nodes
+*/
+#let tint-override = (overrides) => {
+
+}
+#let default-palette = (red, green, blue, orange, purple, gray, yellow)
+
+#let layer-tinter = (
+	palette: default-palette
+) => {
+	(nodes) => {
+		for (node-id, properties) in nodes {
+			assert(properties.layer != none, message: "Node " + node-id + " has no layer attribute. Are you using a layered layout?")
+			let layer = properties.layer
+			let color = palette.at(calc.rem(layer, palette.len()))
+			nodes.at(node-id).insert("color", color)
+		}
+		nodes
+	}
+}
+
+#let categorical-tinter = (
+	palette: default-palette
+) => {
+	
+}
+
+
+
 #let auto-linear-layout = (
 	layer-gap: 1.5,
 	node-gap: 0.75,
@@ -132,7 +164,7 @@
 	layers: (:)
 ) => {
 	let layer-override = layers
-	(nodes) => {
+	( layouter: (nodes) => {
 		// Calculate layers for each node
 		let layers = topo-sort(nodes, layer-override: layer-override)
 
@@ -233,38 +265,102 @@
 		}
 
 		return nodes
-	}
+	}, drawer: (nodes, ribbon-colorizer) => {
+		cetz.canvas({
+			import cetz.draw: *
+			
+			
+			let acc-out-size = (:)
+			let acc-in-size = (:)
+			for (node-id, properties) in nodes {
+				let (x, y, width, height) = properties
+				rect((x - width/2, y - height/2), (x + width/2, y + height/2), fill: properties.color, stroke: none)
+				// forces
+				// let force = properties.at("force", default: 0)
+				// if (force != 0) {
+				// 	let sign = if (force > 0) { 1 } else { -1 }
+				// 	let len = calc.min(calc.abs(force), 1)
+				// 	line((x, y), (x, y + len * sign), stroke: red, stroke-width: 0.05, end-arrow: (size: 0.1, angle: 20))
+				// }
+				content((x, y), text(node-id, size: 8pt))
+
+				// ribbons
+				for (to-node-id, edge-size) in properties.edges {
+					let to-properties = nodes.at(to-node-id)
+					let top-left = (x + width / 2, y + height / 2 - acc-out-size.at(node-id, default: 0) / properties.size * height)
+					let bottom-left = (top-left.at(0), top-left.at(1) - edge-size / properties.size * height)
+					let top-right = (to-properties.x - to-properties.width / 2, to-properties.y + to-properties.height / 2 - acc-in-size.at(to-node-id, default: 0) / to-properties.size * to-properties.height)
+					let bottom-right = (top-right.at(0), top-right.at(1) - edge-size / to-properties.size * to-properties.height)
+					acc-out-size.insert(node-id, acc-out-size.at(node-id, default: 0) + edge-size)
+					acc-in-size.insert(to-node-id, acc-in-size.at(to-node-id, default: 0) + edge-size)
+
+					let ribbon-width = calc.min(top-left.at(1) - bottom-left.at(1), top-right.at(1) - bottom-right.at(1))
+
+					// TODO: Fine tune bezier control points
+					let bezier-top-control-1 = point-translate(point-mix(top-left, top-right, 0.5), (0, ribbon-width * 0.1))
+					let bezier-top-control-2 = point-translate(point-mix(top-left, top-right, 0.5), (0, -ribbon-width * 0.1))
+					let bezier-bottom-control-1 = point-translate(point-mix(bottom-left, bottom-right, 0.5), (0, ribbon-width * 0.1))
+					let bezier-bottom-control-2 = point-translate(point-mix(bottom-left, bottom-right, 0.5), (0, -ribbon-width * 0.1))
+					merge-path(
+						fill: ribbon-colorizer(properties.color, to-properties.color, node-id, to-node-id),
+						stroke: none,
+						{
+							bezier(top-left, top-right, bezier-top-control-1, bezier-top-control-2)
+							line(top-right, bottom-right)
+							bezier(bottom-right, bottom-left, bezier-bottom-control-1, bezier-bottom-control-2)
+							line(bottom-left, top-left)
+						}
+					)
+				}
+			}
+		})
+
+	})
 }
 
+
+/*
+Ribbon colorizers
+*/
+
+#let ribbon-from-color = (
+	transparency: 75%,
+) => {
+	(from-color, to-color, from-node, to-node) => from-color.transparentize(transparency)
+}
+#let ribbon-to-color = (
+	transparency: 75%,
+) => {
+	(from-color, to-color, from-node, to-node) => to-color.transparentize(transparency)
+}
+#let ribbon-gradient-from-to = (
+	transparency: 75%,
+) => {
+	(from-color, to-color, from-node, to-node) => {
+		gradient.linear(from-color.transparentize(transparency), to-color.transparentize(transparency))
+	}
+}
+#let ribbon-color = (
+	color: black,
+	transparency: 90%,
+) => {
+	(from-color, to-color, from-node, to-node) => color.transparentize(transparency)
+}
 
 
 #let sankey = (
 	data,
-	layouter: auto-linear-layout(),
+	layout: auto-linear-layout(),
+	tinter: layer-tinter(),
+	ribbon-color: ribbon-from-color()
 ) => {
 	let nodes = preprocess-data(data)
+	let (layouter, drawer) = layout
 	nodes = layouter(nodes)
+	nodes = tinter(nodes)
+	drawer(nodes, ribbon-color)
 	repr(nodes)
 	repr(topo-sort(nodes))
-
-
-	cetz.canvas({
-		import cetz.draw: *
-		
-		for (node-id, properties) in nodes {
-			let (x, y, width, height) = properties
-			rect((x - width/2, y - height/2), (x + width/2, y + height/2), fill: aqua, stroke: none)
-			// forces
-			// let force = properties.at("force", default: 0)
-			// if (force != 0) {
-			// 	let sign = if (force > 0) { 1 } else { -1 }
-			// 	let len = calc.min(calc.abs(force), 1)
-			// 	line((x, y), (x, y + len * sign), stroke: red, stroke-width: 0.05, end-arrow: (size: 0.1, angle: 20))
-			// }
-			content((x, y), text(node-id, size: 8pt))
-			
-		}
-	})
 }
 
 
@@ -277,6 +373,43 @@
 	)
 )
 #sankey(
+	// (
+	// 	"iPhone": (
+	// 		"Products": 44582
+	// 	),
+	// 	"Wearables, Home, Accessories": (
+	// 		"Products": 7404
+	// 	),
+	// 	"Mac": (
+	// 		"Products": 8046
+	// 	),
+	// 	"iPad": (
+	// 		"Products": 6581
+	// 	),
+	// 	"Products": (
+	// 		"Apple Net Sales Quarter": 66613
+	// 	),
+	// 	"Services": (
+	// 		"Apple Net Sales Quarter": 27423
+	// 	),
+	// 	"Apple Net Sales Quarter": (
+	// 		"Cost of Sales": 50318,
+	// 		"Gross Margin": 43718
+	// 	),
+	// 	"Gross Margin": (
+	// 		"Research & Development": 8866,
+	// 		"Selling, General, Administrative": 6650,
+	// 		"Operating Income": 28202
+	// 	),
+	// 	"Operating Income": (
+	// 		"Other Expense": 171,
+	// 		"Income before Taxes": 28031
+	// 	),
+	// 	"Income before Taxes": (
+	// 		"Taxes": 4597,
+	// 		"Net Income": 23434
+	// 	)
+	// ),
 	(
 		"iPhone": (
 			"Products": 44582
@@ -297,24 +430,24 @@
 			"Apple Net Sales Quarter": 27423
 		),
 		"Apple Net Sales Quarter": (
+			"Gross Margin": 43718,
 			"Cost of Sales": 50318,
-			"Gross Margin": 43718
 		),
 		"Gross Margin": (
+			"Operating Income": 28202,
 			"Research & Development": 8866,
 			"Selling, General, Administrative": 6650,
-			"Operating Income": 28202
 		),
 		"Operating Income": (
+			"Income before Taxes": 28031,
 			"Other Expense": 171,
-			"Income before Taxes": 28031
 		),
 		"Income before Taxes": (
 			"Taxes": 4597,
 			"Net Income": 23434
 		)
 	),
-	layouter: auto-linear-layout(
+	layout: auto-linear-layout(
 		layers: (
 			"Services": 1,
 		)
