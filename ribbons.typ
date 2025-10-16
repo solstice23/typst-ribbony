@@ -132,7 +132,9 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 #let tint-override = (overrides) => {
 
 }
-#let default-palette = (red, green, blue, orange, purple, gray, yellow)
+// #let default-palette = (red, green, blue, orange, purple, gray, yellow)
+#let color-brewer-palette = (rgb("#66C2A5"), rgb("#FC8D62"), rgb("#8DA0CB"), rgb("#E78AC3"), rgb("#A6D854"), rgb("#FFD92F"), rgb("#E5C494"), rgb("#B3B3B3"))
+#let default-palette = color-brewer-palette
 
 #let layer-tinter = (
 	palette: default-palette
@@ -297,17 +299,17 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 					let ribbon-width = calc.min(top-left.at(1) - bottom-left.at(1), top-right.at(1) - bottom-right.at(1))
 
 					// TODO: Fine tune bezier control points
-					let bezier-top-control-1 = point-translate(point-mix(top-left, top-right, 0.5), (0, ribbon-width * 0.1))
-					let bezier-top-control-2 = point-translate(point-mix(top-left, top-right, 0.5), (0, -ribbon-width * 0.1))
-					let bezier-bottom-control-1 = point-translate(point-mix(bottom-left, bottom-right, 0.5), (0, ribbon-width * 0.1))
-					let bezier-bottom-control-2 = point-translate(point-mix(bottom-left, bottom-right, 0.5), (0, -ribbon-width * 0.1))
+					let bezier-top-control-1 = point-translate(point-mix(top-left, top-right, 0.33), (0, ribbon-width * 0.15))
+					// let bezier-top-control-2 = point-translate(point-mix(top-left, top-right, 0.5), (0, -ribbon-width * 0.1))
+					let bezier-bottom-control-1 = point-translate(point-mix(bottom-left, bottom-right, 0.33), (0, ribbon-width * 0.15))
+					// let bezier-bottom-control-2 = point-translate(point-mix(bottom-left, bottom-right, 0.5), (0, -ribbon-width * 0.1))
 					merge-path(
 						fill: ribbon-colorizer(properties.color, to-properties.color, node-id, to-node-id),
 						stroke: none,
 						{
-							bezier(top-left, top-right, bezier-top-control-1, bezier-top-control-2)
+							bezier(top-left, top-right, bezier-top-control-1)
 							line(top-right, bottom-right)
-							bezier(bottom-right, bottom-left, bezier-bottom-control-1, bezier-bottom-control-2)
+							bezier(bottom-right, bottom-left, bezier-bottom-control-1)
 							line(bottom-left, top-left)
 						}
 					)
@@ -352,7 +354,7 @@ Ribbon colorizers
 	data,
 	layout: auto-linear-layout(),
 	tinter: layer-tinter(),
-	ribbon-color: ribbon-from-color()
+	ribbon-color: ribbon-gradient-from-to()
 ) => {
 	let nodes = preprocess-data(data)
 	let (layouter, drawer) = layout
