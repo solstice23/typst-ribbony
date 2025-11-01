@@ -216,64 +216,91 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 				offset -= height + node-gap
 			}
 		}
-		// Resolve physical system:
 		/*
 			A node receives forces from:
-				- repulsion from other nodes in the same layer, to keep minimum distance
-				- attraction to the mass center of connected nodes (only counting x direction force)
+				- attraction to every connected nodes
+			Nodes have rigid constraints:
+				- nodes in the same layer must have at least node-gap distance
 		*/
-		// TODO: Use gradient descent instead of simple iteration
-
-		let iterations = 60
-		let alpha = 0.1
-		let forces = (:) // all forces are in x axis only
-		for i in range(1, iterations) {
-			let nodes-new = nodes
+		let calculate-attraction-forces = (nodes) => {
+			let forces = (:)
 			for (node-id, properties) in nodes {
 				forces.insert(node-id, 0.0)
 			}
 
-			// Repulsion forces
-			for layer in layers {
-				for (i, node-id1) in layer.enumerate() {
-					if (i + 1 == layer.len()) { break }
-					let y1 = nodes.at(node-id1).y
-					let h1 = nodes.at(node-id1).height
-					let y2 = nodes.at(layer.at(i + 1)).y
-					let h2 = nodes.at(layer.at(i + 1)).height
-					let gap = (y1 - h1 / 2) - (y2 + h2 / 2)
-					if (gap < node-gap) {
-						let force = calc.pow(node-gap - gap, 2) * 5
-						forces.insert(node-id1, forces.at(node-id1) + force)
-						forces.insert(layer.at(i + 1), forces.at(layer.at(i + 1)) - force)
-					}
-				}
-			}
-			// Attraction forces
 			for (node-id, properties) in nodes {
 				let y1 = properties.y
 				
 				for to in properties.edges.keys() {
-					let y = nodes.at(to).y
-					let dy = y - y1
+					let y2 = nodes.at(to).y
+					let dy = y2 - y1
 					let dx = layer-gap
 					let dist = calc.sqrt(dx * dx + dy * dy)
 					let theta = calc.atan2(dy, dx)
-					let force = dist  * calc.cos(theta) * 0.5
+					let force = dist * calc.cos(theta) * 0.5
 					forces.insert(node-id, forces.at(node-id) + force)
 					forces.insert(to, forces.at(to) - force)
 				}
-
 			}
+			
+			return forces
+		}
+		
+		let enforce-rigid-min-gap = (nodes, layers) => {
+			let max-iterations = 15
+			let nodes-new = nodes
+			
+			for iter in range(0, max-iterations) {
+				let violations = false
+				
+				for layer in layers {
+					for i in range(0, layer.len() - 1) {
+						let node-id1 = layer.at(i)
+						let node-id2 = layer.at(i + 1)
+						let y1 = nodes-new.at(node-id1).y
+						let h1 = nodes-new.at(node-id1).height
+						let y2 = nodes-new.at(node-id2).y
+						let h2 = nodes-new.at(node-id2).height
+						
+						let bottom1 = y1 - h1 / 2
+						let top2 = y2 + h2 / 2
+						let current-gap = bottom1 - top2
+						
+						if current-gap < node-gap {
+							violations = true
+							let violation = node-gap - current-gap
+							// Push them apart equally
+							nodes-new.at(node-id1).insert("y", nodes-new.at(node-id1).y + violation / 2)
+							nodes-new.at(node-id2).insert("y", nodes-new.at(node-id2).y - violation / 2)
+						}
+					}
+				}
+				
+				if not violations { break }
+			}
+			
+			return nodes-new
+		}
+
+		// Resolve physical system
+		let iterations = 30
+		let alpha = 0.1
+		
+		for i in range(1, iterations) {
+			let nodes-new = nodes
+			
+			let forces = calculate-attraction-forces(nodes)
+			
 			// Apply forces
 			for (node-id, properties) in nodes {
 				let y = properties.y
 				let force = forces.at(node-id)
 				y += force * alpha
 				nodes-new.at(node-id).insert("y", y)
-				// nodes-new.at(node-id).insert("force", force)
+				nodes-new.at(node-id).insert("force", force)
 			}
-			nodes = nodes-new
+			
+			nodes = enforce-rigid-min-gap(nodes-new, layers)
 		}
 
 		return nodes
@@ -317,6 +344,14 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 							line(bottom-left, top-left)
 						}
 					)
+				}
+
+				// forces
+				let force = properties.at("force", default: 0)
+				if (force != 0) {
+					let sign = if (force > 0) { 1 } else { -1 }
+					let len = calc.min(calc.abs(force), 1)
+					// line((x, y), (x, y + len * sign), stroke: red, stroke-width: 0.05, mark: (end: ">"))
 				}
 			}
 		})
@@ -471,6 +506,146 @@ Ribbon colorizers
 	aliases: (
 		"A": "meow"
 	)
+)
+#sankey(
+	(
+		"Nuclear": (
+			"Thermal generation": 839
+		),
+		"Agricultural 'waste'": (
+			"Bio-conversion": 124
+		),
+		"UK land based bioenergy": (
+			"Bio-conversion": 182
+		),
+		"Marine algae": (
+			"Bio-conversion": 4
+		),
+		"Other waste": (
+			"Bio-conversion": 77,
+			"Solid": 56
+		),
+		"Tidal": (
+			"Electricity grid": 9
+		),
+		"Wave": (
+			"Electricity grid": 19
+		),
+		"Solar": (
+			"Solar PV": 59,
+			"Solar Thermal": 19
+		),
+		"Solar PV": (
+			"Electricity grid": 59
+		),
+		"Geothermal": (
+			"Electricity grid": 7
+		),
+		"Hydro": (
+			"Electricity grid": 6
+		),
+		"Wind": (
+			"Electricity grid": 289
+		),
+		"District heating": (
+			"Industry": 10,
+			"Heating and cooling - commercial": 22,
+			"Heating and cooling - homes": 46
+		),
+		"Solar Thermal": (
+			"Heating and cooling - homes": 19
+		),
+		"Pumped heat": (
+			"Heating and cooling - homes": 193,
+			"Heating and cooling - commercial": 70
+		),
+		"Bio-conversion": (
+			"Losses": 26,
+			"Solid": 280,
+			"Gas": 81,
+			"Liquid": 0
+		),
+		"Biomass imports": (
+			"Solid": 35
+		),
+		"Coal imports": (
+			"Coal": 11
+		),
+		"Coal reserves": (
+			"Coal": 63
+		),
+		"Coal": (
+			"Solid": 75
+		),
+		"Gas": (
+			"Losses": 1,
+			"Thermal generation": 151,
+			"Heating and cooling - commercial": 0,
+			"Industry": 48,
+			"Agriculture": 2
+		),
+		"Gas imports": (
+			"Ngas": 40
+		),
+		"Gas reserves": (
+			"Ngas": 82
+		),
+		"Ngas": (
+			"Gas": 122
+		),
+		"H2 conversion": (
+			"H2": 20,
+			"Losses": 6
+		),
+		"Solid": (
+			"Agriculture": 0,
+			"Thermal generation": 400,
+			"Industry": 46
+		),
+		"Electricity grid": (
+			"Losses": 56,
+			"Industry": 342,
+			"Over generation / exports": 104,
+			"Lighting & appliances - commercial": 90,
+			"Lighting & appliances - homes": 93,
+			"Heating and cooling - homes": 113,
+			"H2 conversion": 27,
+			"Rail transport": 7,
+			"Road transport": 37,
+			"Agriculture": 4,
+			"Heating and cooling - commercial": 40
+		),
+		"H2": (
+			"Road transport": 20
+		),
+		"Liquid": (
+			"Industry": 121,
+			"Road transport": 135,
+			"International aviation": 206,
+			"International shipping": 128,
+			"Agriculture": 3,
+			"National navigation": 33,
+			"Rail transport": 4,
+			"Domestic aviation": 14
+		),
+		"Oil imports": (
+			"Oil": 504
+		),
+		"Oil reserves": (
+			"Oil": 107
+		),
+		"Oil": (
+			"Liquid": 611
+		),
+		"Biofuel imports": (
+			"Liquid": 35
+		),
+		"Thermal generation": (
+			"Electricity grid": 525,
+			"Losses": 787,
+			"District heating": 79
+		)
+	),
 )
 #cetz.canvas({
 	import cetz.draw: *
