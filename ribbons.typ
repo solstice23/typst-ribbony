@@ -113,10 +113,16 @@
 			data.at(node-id).insert("name", node-id)
 		}
 	}
+	// add #id
+	let counter = 0
+	for (node-id, properties) in data {
+		data.at(node-id).insert("number-id", counter)
+		counter += 1
+	}
 
 
 	// Add other necessary attributes to nodes
-	// size: size (max(sum of incoming sizes, sum of outgoing sizes)) of a node
+	// in-size and out-size: sum of incoming and outgoing edge sizes
 	let in-size = (:)
 	for (node-id, properties) in data {
 		for (to, size) in properties.edges {
@@ -125,10 +131,9 @@
 	}
 	for (node-id, properties) in data {
 		let out-size = properties.edges.values().sum(default: 0)
-		let node-size = calc.max(in-size.at(node-id, default: 0), out-size)
-		data.at(node-id).insert("size", node-size)
+		data.at(node-id).insert("in-size", in-size.at(node-id, default: 0))
+		data.at(node-id).insert("out-size", out-size)
 	}
-
 
 	// TODO: Add more attributes
 	data
@@ -151,7 +156,7 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 ) => {
 	(nodes) => {
 		for (node-id, properties) in nodes {
-			assert(properties.layer != none, message: "Node " + node-id + " has no layer attribute. Are you using a layered layout?")
+			assert(properties.at("layer", default: none) != none, message: "Node " + node-id + " has no layer attribute. Are you using a layered layout?")
 			let layer = properties.layer
 			let color = palette.at(calc.rem(layer, palette.len()))
 			nodes.at(node-id).insert("color", color)
@@ -164,6 +169,49 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 	palette: default-palette
 ) => {
 	
+}
+
+#let node-tinter = (
+	palette: default-palette
+) => {
+	(nodes) => {
+		for (node-id, properties) in nodes {
+			let number-id = properties.number-id
+			let color = palette.at(calc.rem(number-id, palette.len()))
+			nodes.at(node-id).insert("color", color)
+		}
+		return nodes
+	}
+}
+#let dict-tinter = (
+	color-map
+) => {
+	assert(type(color-map) == dictionary, message: "Expected a dictionary for color-map")
+	(nodes) => {
+		for (node-id, properties) in nodes {
+			let color = color-map.at(node-id, default: default-palette.at(0))
+			nodes.at(node-id).insert("color", color)
+		}
+		return nodes
+	}
+}
+
+
+
+#let default-tinter = (
+	palette: default-palette
+) => {
+	// choose layer tinter if layers exist, otherwise node tinter
+	(nodes) => {
+		if nodes.keys().len() == 0 {
+			return layer-tinter(palette: palette)(nodes)
+		}
+		if (nodes.at(nodes.keys().first()).at("layer", default: none) != none) {
+			return layer-tinter(palette: palette)(nodes)
+		} else {
+			return node-tinter(palette: palette)(nodes)
+		}
+	}
 }
 
 
@@ -184,6 +232,11 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 			for node-id in layer {
 				nodes.at(node-id).insert("layer", layer-index)
 			}
+		}
+		// node size=max(in-size, out-size)
+		for (node-id, properties) in nodes {
+			let node-size = calc.max(properties.in-size, properties.out-size)
+			nodes.at(node-id).insert("size", node-size)
 		}
 		// Give widths
 		for (node-id, properties) in nodes {
@@ -308,7 +361,6 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 		cetz.canvas({
 			import cetz.draw: *
 			
-			
 			let acc-out-size = (:)
 			let acc-in-size = (:)
 			for (node-id, properties) in nodes {
@@ -359,6 +411,136 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 	})
 }
 
+#let circular-layout = (
+	radius: 4,
+	node-width: 0.5,
+	node-gap: 1deg,
+	angle-offset: 0deg,
+	directed: false,
+) => {
+	(layouter: (nodes) => {
+		// node size=in-size+out-size by default
+		for (node-id, properties) in nodes {
+			let node-size = if (directed) { properties.in-size + properties.out-size } else { properties.out-size }
+			nodes.at(node-id).insert("size", node-size)
+		}
+		// Place all node on a ring (only 1 layer)
+		let sum = 0
+		for (node-id, properties) in nodes {
+			sum += properties.size
+		}
+		sum /= 1 - (node-gap * nodes.keys().len() / 360deg)
+
+		let angle = angle-offset + 90deg
+		for (node-id, properties) in nodes {
+			let node-size = properties.size
+			let node-arc = (node-size / sum) * 360deg
+			nodes.at(node-id).insert("angle", angle + node-arc / 2)
+			nodes.at(node-id).insert("arc", node-arc)
+			angle += node-arc + node-gap
+		}
+		
+		return nodes
+	}, drawer: (nodes, ribbon-colorizer) => {
+		cetz.canvas({
+			import cetz.draw: *
+			
+			// out size acculates from 0, in size acculates from total size
+			let in-acc-size = (:)
+			let out-acc-size = (:) // if undirected, only use out-acc-size
+			let drawn = (:) // drawn[from][to] = bool, for drawing undirected edges only once
+			for (node-id, properties) in nodes {
+				let angle = properties.angle
+				let node-arc = properties.arc
+				let width = node-width
+
+				let inner-left = (radius * calc.cos(angle - node-arc / 2), radius * calc.sin(angle - node-arc / 2))
+				let inner-center = (radius * calc.cos(angle), radius * calc.sin(angle))
+				let inner-right = (radius * calc.cos(angle + node-arc / 2), radius * calc.sin(angle + node-arc / 2))
+				let outer-left = ((radius + width) * calc.cos(angle - node-arc / 2), (radius + width) * calc.sin(angle - node-arc / 2))
+				let outer-center = ((radius + width) * calc.cos(angle), (radius + width) * calc.sin(angle))
+				let outer-right = ((radius + width) * calc.cos(angle + node-arc / 2), (radius + width) * calc.sin(angle + node-arc / 2))
+
+				merge-path(
+					fill: properties.color,
+					stroke: none,
+					{
+						arc-through(inner-left, inner-center, inner-right)
+						line(inner-right, outer-right)
+						arc-through(outer-right, outer-center, outer-left)
+						line(outer-left, inner-left)
+					}
+				)
+
+				// content((x, y), text(properties.name, size: 8pt))
+
+				// ribbons
+				for (to-node-id, out-edge-size) in properties.edges {
+					if (not directed and (
+						drawn.at(node-id, default: (:)).at(to-node-id, default: false) or
+						drawn.at(to-node-id, default: (:)).at(node-id, default: false)
+					)) {
+						continue
+					}
+
+
+					let to-properties = nodes.at(to-node-id)
+					
+					let in-edge-size = if (directed) { out-edge-size } else {
+						to-properties.edges.at(node-id, default: 0)
+					}
+
+					let from-acc-size = out-acc-size.at(node-id, default: 0)
+					let to-acc-size = if (directed) {in-acc-size.at(to-node-id, default: to-properties.size) }
+										else { out-acc-size.at(to-node-id, default: 0) }
+					let from-start-angle = angle - node-arc / 2 + (from-acc-size / properties.size * node-arc)
+					let from-end-angle = angle - node-arc / 2 + ((from-acc-size + out-edge-size) / properties.size * node-arc)
+					let to-start-angle = to-properties.angle - to-properties.arc / 2 + ((to-acc-size - in-edge-size) / to-properties.size * to-properties.arc)
+					let to-end-angle = to-properties.angle - to-properties.arc / 2 + (to-acc-size / to-properties.size * to-properties.arc)
+					if (not directed) {
+						to-start-angle = to-properties.angle - to-properties.arc / 2 + (to-acc-size / to-properties.size * to-properties.arc)
+						to-end-angle = to-properties.angle - to-properties.arc / 2 + ((to-acc-size + in-edge-size) / to-properties.size * to-properties.arc)
+						if (drawn.at(node-id, default: none) == none) { drawn.insert(node-id, (:)) }
+						drawn.at(node-id).insert(to-node-id, true)
+						if (drawn.at(to-node-id, default: none) == none) { drawn.insert(to-node-id, (:)) }
+						drawn.at(to-node-id).insert(node-id, true)
+					}
+
+					let from-left = (radius * calc.cos(from-start-angle), radius * calc.sin(from-start-angle))
+					let from-center = (radius * calc.cos((from-start-angle + from-end-angle) / 2), radius * calc.sin((from-start-angle + from-end-angle) / 2))
+					let from-right = (radius * calc.cos(from-end-angle), radius * calc.sin(from-end-angle))
+					let to-left = (radius * calc.cos(to-start-angle), radius * calc.sin(to-start-angle))
+					let to-center = (radius * calc.cos((to-start-angle + to-end-angle) / 2), radius * calc.sin((to-start-angle + to-end-angle) / 2))
+					let to-right = (radius * calc.cos(to-end-angle), radius * calc.sin(to-end-angle))
+
+					out-acc-size.insert(node-id, from-acc-size + out-edge-size)
+					if (directed) {
+						in-acc-size.insert(to-node-id, to-acc-size - in-edge-size)
+					} else if (node-id != to-node-id) {
+						out-acc-size.insert(to-node-id, to-acc-size + in-edge-size)
+					}
+
+					
+					merge-path(
+						fill: ribbon-colorizer(
+							properties.color, to-properties.color, node-id, to-node-id,
+							angle: -calc.atan2(to-center.at(0) - from-center.at(0), to-center.at(1) - from-center.at(1))
+						),
+						stroke: 0.5pt + white,
+						{
+							arc-through(from-left, from-center, from-right)
+							bezier(from-right, to-left, (0, 0))
+							arc-through(to-left, to-center, to-right)
+							bezier(to-right, from-left, (0, 0))
+						}
+					)
+					
+				}
+
+			}
+		})
+	})
+}
 
 /*
 Ribbon colorizers
@@ -367,25 +549,25 @@ Ribbon colorizers
 #let ribbon-from-color = (
 	transparency: 75%,
 ) => {
-	(from-color, to-color, from-node, to-node) => from-color.transparentize(transparency)
+	(from-color, to-color, from-node, to-node, ..) => from-color.transparentize(transparency)
 }
 #let ribbon-to-color = (
 	transparency: 75%,
 ) => {
-	(from-color, to-color, from-node, to-node) => to-color.transparentize(transparency)
+	(from-color, to-color, from-node, to-node, ..) => to-color.transparentize(transparency)
 }
 #let ribbon-gradient-from-to = (
 	transparency: 75%,
 ) => {
-	(from-color, to-color, from-node, to-node) => {
-		gradient.linear(from-color.transparentize(transparency), to-color.transparentize(transparency))
+	(from-color, to-color, from-node, to-node, angle: 0deg, ..) => {
+		gradient.linear(from-color.transparentize(transparency), to-color.transparentize(transparency), angle: angle)
 	}
 }
-#let ribbon-color = (
+#let ribbon-solid-color = (
 	color: black,
 	transparency: 90%,
 ) => {
-	(from-color, to-color, from-node, to-node) => color.transparentize(transparency)
+	(from-color, to-color, from-node, to-node, ..) => color.transparentize(transparency)
 }
 
 
@@ -393,7 +575,7 @@ Ribbon colorizers
 	data,
 	aliases: (:),
 	layout: auto-linear-layout(),
-	tinter: layer-tinter(),
+	tinter: default-tinter(),
 	ribbon-color: ribbon-from-color()
 ) => {
 	let nodes = preprocess-data(data, aliases)
@@ -646,6 +828,7 @@ Ribbon colorizers
 			"District heating": 79
 		)
 	),
+	ribbon-color: ribbon-gradient-from-to()
 )
 #cetz.canvas({
 	import cetz.draw: *
@@ -653,4 +836,45 @@ Ribbon colorizers
 	line(a, c, d, b, stroke: gray)
 	bezier(a, b, c, d)
 })
-			
+
+
+
+#sankey(
+	(
+		"a": ("a": 1000, "b": 1000), 
+		"b": ("a": 1000, "b": 1000), 
+	),
+	layout: circular-layout(),
+	// tinter: node-tinter()
+)
+
+#sankey(
+	(
+		"a": ("a": 1000, "b": 1000), 
+		"b": ("a": 500, "b": 1000), 
+	),
+	layout: circular-layout(directed: true),
+	// tinter: node-tinter()
+	ribbon-color: ribbon-gradient-from-to()
+)
+
+
+#sankey(
+	(
+		"black": ("black": 11975, "blond": 5871, "brown": 8916, "red": 2868), 
+		"blond": ("black": 1951, "blond": 10048, "brown": 2060, "red": 6171), 
+		"brown": ("black": 8010, "blond": 16145, "brown": 8090, "red": 8045), 
+		"red": ("black": 1013, "blond": 990, "brown": 940, "red": 6907)  
+	),
+	layout: circular-layout(),
+	ribbon-color: ribbon-gradient-from-to(transparency: 70%),
+	tinter: dict-tinter((
+		"black": rgb("#000000"),
+		"blond": rgb("#ffdd89"),
+		"brown": rgb("#957244"),
+		"red": rgb("#f26223"),
+	))
+)
+
+// TODO: size overrides
+
