@@ -204,9 +204,9 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 
 
 #let auto-linear-layout = (
-	layer-gap: 1.5,
-	node-gap: 0.75,
-	node-width: 0.5,
+	layer-gap: 2,
+	node-gap: 1.5,
+	node-width: 0.25,
 	basenode-height: 3,
 	layers: (:)
 ) => {
@@ -348,7 +348,7 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 		}
 
 		return nodes
-	}, drawer: (nodes, ribbon-colorizer) => {
+	}, drawer: (nodes, ribbon-colorizer, label-drawer) => {
 		cetz.canvas({
 			import cetz.draw: *
 			
@@ -356,9 +356,24 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 			let acc-in-size = (:)
 			for (node-id, properties) in nodes {
 				let (x, y, width, height) = properties
-				rect((x - width/2, y - height/2), (x + width/2, y + height/2), fill: properties.color, stroke: none)
-				
-				content((x, y), text(properties.name, size: 8pt))
+				let node-name = node-id + "_node";
+
+				rect(name: node-name, (x - width / 2, y - height / 2), (x + width / 2, y + height / 2), fill: properties.color, stroke: none)
+
+				// label
+				on-layer(
+					1,
+					{
+						label-drawer(
+							node-name,
+							properties,
+							layer-gap: layer-gap,
+							node-gap: node-gap,
+							node-width: node-width,
+							basenode-height: basenode-height
+						)
+					}
+				)
 
 				// sort ribbons first by slope to prevent crossing
 				let edges = ()
@@ -443,7 +458,7 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 		}
 		
 		return nodes
-	}, drawer: (nodes, ribbon-colorizer) => {
+	}, drawer: (nodes, ribbon-colorizer, label-drawer) => {
 		cetz.canvas({
 			import cetz.draw: *
 			
@@ -572,13 +587,66 @@ Ribbon colorizers
 	(from-color, to-color, from-node, to-node, ..) => color.transparentize(transparency)
 }
 
+/*
+Label drawer
+*/
+#let default-linear-label-drawer = (
+	align: right,
+	offset: none,
+	width-limit: auto, // auto | false | value
+) => {
+	(
+		node-name,
+		properties,
+		layer-gap: none,
+		..args
+	) => {
+		import cetz.draw: *
+
+		let rel = if (offset != none) { offset } else {
+			if (align == right) {
+				(0.05, 0)
+			} else if (align == left) {
+				(-0.05, 0)
+			} else {
+				(0, 0)
+			}
+		}
+
+		let content-anchor = if (align == right) { "west" } else if (align == left) { "east" } else { "center" }
+		let rel-to-anchor = if (align == right) { "east" } else if (align == left) { "west" } else { "center" }
+
+		let outer-box-width = if (width-limit == auto) {
+			if (layer-gap != none) {
+				layer-gap * 0.95cm
+			} else { auto }
+		} else if (width-limit == false) {
+			auto
+		} else {
+			width-limit
+		}
+
+		content(
+			anchor: content-anchor, (rel: rel, to: node-name + "." + rel-to-anchor), 
+			box(width: outer-box-width)[
+				#box(inset: 0.25em, fill: white.transparentize(30%), radius: 2pt)[
+					#set par(leading: 0.5em)
+					#text(properties.name, size: 0.8em) \
+					#text(str(properties.size), size: 1em)
+				]
+			]
+		)
+	}
+}
+
 
 #let sankey = (
 	data,
 	aliases: (:),
 	layout: auto-linear-layout(),
 	tinter: default-tinter(),
-	ribbon-color: ribbon-from-color()
+	ribbon-color: ribbon-from-color(),
+	draw-label: default-linear-label-drawer(),
 ) => {
 	let nodes = preprocess-data(data, aliases)
 	//repr(assign-layers(nodes))
@@ -586,7 +654,7 @@ Ribbon colorizers
 	nodes = layouter(nodes)
 	nodes = tinter(nodes)
 	// repr(nodes)
-	drawer(nodes, ribbon-color)
+	drawer(nodes, ribbon-color, draw-label)
 }
 
 
