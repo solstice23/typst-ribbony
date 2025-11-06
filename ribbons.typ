@@ -208,7 +208,10 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 	node-gap: 1.5,
 	node-width: 0.25,
 	basenode-height: 3,
-	layers: (:)
+	centerize-layer: false,
+	vertical: false,
+	layers: (:),
+	radius: 2pt,
 ) => {
 	let layer-override = layers
 	( layouter: (nodes) => {
@@ -347,10 +350,50 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 			nodes = enforce-rigid-min-gap(nodes-new, layers)
 		}
 
+		// Center each layer to y=0
+		if (centerize-layer) {
+			for layer in layers {
+				let min-y = 0.0
+				let max-y = 0.0
+				for node-id in layer {
+					let y = nodes.at(node-id).y
+					let height = nodes.at(node-id).height
+					min-y = calc.min(min-y, y - height / 2)
+					max-y = calc.max(max-y, y + height / 2)
+				}
+				let layer-height = max-y - min-y
+				let offset = layer-height / 2 + min-y
+
+				for node-id in layer {
+					let y = nodes.at(node-id).y
+					nodes.at(node-id).insert("y", y - offset)
+				}
+			}
+		}
+
+		// Normalize y positions
+		let min-y = 99999999
+		for (node-id, properties) in nodes {
+			let y = properties.y
+			let height = properties.height
+			min-y = calc.min(min-y, y - height / 2)
+		}
+		for (node-id, properties) in nodes {
+			let y = properties.y
+			nodes.at(node-id).insert("y", y - min-y)
+		}
+
 		return nodes
 	}, drawer: (nodes, ribbon-colorizer, label-drawer) => {
 		cetz.canvas({
 			import cetz.draw: *
+
+			if (vertical) {
+				set-transform(cetz.matrix.mul-mat(
+					cetz.matrix.transform-rotate-z(90deg),
+					cetz.matrix.transform-scale((1, -1))
+				))
+			}
 			
 			let acc-out-size = (:)
 			let acc-in-size = (:)
@@ -358,7 +401,13 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 				let (x, y, width, height) = properties
 				let node-name = node-id + "_node";
 
-				rect(name: node-name, (x - width / 2, y - height / 2), (x + width / 2, y + height / 2), fill: properties.color, stroke: none)
+				rect(name: node-name,
+					(rel: (0, -radius / 2), to: (x - width / 2, y - height / 2)), 
+					(rel: (0, radius / 2), to: (x + width / 2, y + height / 2)), 
+					fill: properties.color,
+					stroke: none,
+					radius: radius
+				)
 
 				// label
 				on-layer(
@@ -370,7 +419,8 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 							layer-gap: layer-gap,
 							node-gap: node-gap,
 							node-width: node-width,
-							basenode-height: basenode-height
+							basenode-height: basenode-height,
+							vertical-layout: vertical
 						)
 					}
 				)
@@ -591,30 +641,58 @@ Ribbon colorizers
 Label drawer
 */
 #let default-linear-label-drawer = (
-	align: right,
-	offset: none,
-	width-limit: auto, // auto | false | value
+	snap: auto,
+	offset: auto,
+	width-limit: auto, // auto | false | value,
+	styles: (
+		inset: 0.2em,
+		fill: white.transparentize(30%),
+		radius: 2pt
+	),
+	draw-content: (properties) => {[
+		#set par(leading: 0.5em)
+		#text(properties.name, size: 0.8em) \
+		#text(str(properties.size), size: 1em)
+	]}
 ) => {
 	(
 		node-name,
 		properties,
 		layer-gap: none,
+		vertical-layout: false,
 		..args
 	) => {
 		import cetz.draw: *
 
-		let rel = if (offset != none) { offset } else {
-			if (align == right) {
+		let _snap = snap
+
+		let snap = if (_snap == auto) {
+			if (vertical-layout) { bottom } else { right }
+		} else {
+			_snap
+		}
+
+		assert(snap in (left, right, top, bottom, center), message: "Invalid snap value: " + repr(snap))
+		assert((snap in (left, right) and not vertical-layout) or
+			   (snap in (top, bottom) and vertical-layout) or
+			   (snap == center),
+			   message: "Snap value " + repr(snap) + " is incompatible with layout direction")
+
+		let rel = if (offset != auto) { offset } else {
+			if (snap in (right, bottom)) {
 				(0.05, 0)
-			} else if (align == left) {
+			} else if (snap in (left, top)) {
 				(-0.05, 0)
 			} else {
 				(0, 0)
 			}
 		}
 
-		let content-anchor = if (align == right) { "west" } else if (align == left) { "east" } else { "center" }
-		let rel-to-anchor = if (align == right) { "east" } else if (align == left) { "west" } else { "center" }
+		let (content-anchor, rel-to-anchor) = if (snap == left) { ("east", "west") }
+			else if (snap == right) { ("west", "east") }
+			else if (snap == top) { ("south", "west") }
+			else if (snap == bottom) { ("north", "east") }
+			else { ("center", "center") }
 
 		let outer-box-width = if (width-limit == auto) {
 			if (layer-gap != none) {
@@ -625,14 +703,25 @@ Label drawer
 		} else {
 			width-limit
 		}
+		let outer-box-constraints = if (vertical-layout) {
+			(width: auto, height: outer-box-width)
+		} else {
+			(width: outer-box-width, height: auto)
+		}
 
 		content(
 			anchor: content-anchor, (rel: rel, to: node-name + "." + rel-to-anchor), 
-			box(width: outer-box-width)[
-				#box(inset: 0.25em, fill: white.transparentize(30%), radius: 2pt)[
-					#set par(leading: 0.5em)
-					#text(properties.name, size: 0.8em) \
-					#text(str(properties.size), size: 1em)
+			box(..outer-box-constraints)[
+				#set align(
+					if (snap == right) { left }
+					else if (snap == left) { right }
+					else { center } +
+					if (snap == top) { bottom }
+					else if (snap == bottom) { top }
+					else { horizon }
+				)
+				#box(..styles)[
+					#draw-content(properties)
 				]
 			]
 		)
@@ -667,43 +756,45 @@ Label drawer
 	)
 )
 #sankey(
-	// (
-	// 	"iPhone": (
-	// 		"Products": 44582
-	// 	),
-	// 	"Wearables, Home, Accessories": (
-	// 		"Products": 7404
-	// 	),
-	// 	"Mac": (
-	// 		"Products": 8046
-	// 	),
-	// 	"iPad": (
-	// 		"Products": 6581
-	// 	),
-	// 	"Products": (
-	// 		"Apple Net Sales Quarter": 66613
-	// 	),
-	// 	"Services": (
-	// 		"Apple Net Sales Quarter": 27423
-	// 	),
-	// 	"Apple Net Sales Quarter": (
-	// 		"Cost of Sales": 50318,
-	// 		"Gross Margin": 43718
-	// 	),
-	// 	"Gross Margin": (
-	// 		"Research & Development": 8866,
-	// 		"Selling, General, Administrative": 6650,
-	// 		"Operating Income": 28202
-	// 	),
-	// 	"Operating Income": (
-	// 		"Other Expense": 171,
-	// 		"Income before Taxes": 28031
-	// 	),
-	// 	"Income before Taxes": (
-	// 		"Taxes": 4597,
-	// 		"Net Income": 23434
-	// 	)
-	// ),
+	(
+		"iPhone": (
+			"Products": 44582
+		),
+		"Wearables, Home, Accessories": (
+			"Products": 7404
+		),
+		"Mac": (
+			"Products": 8046
+		),
+		"iPad": (
+			"Products": 6581
+		),
+		"Products": (
+			"Apple Net Sales Quarter": 66613
+		),
+		"Services": (
+			"Apple Net Sales Quarter": 27423
+		),
+		"Apple Net Sales Quarter": (
+			"Gross Margin": 43718,
+			"Cost of Sales": 50318,
+		),
+		"Gross Margin": (
+			"Operating Income": 28202,
+			"Research & Development": 8866,
+			"Selling, General, Administrative": 6650,
+		),
+		"Operating Income": (
+			"Income before Taxes": 28031,
+			"Other Expense": 171,
+		),
+		"Income before Taxes": (
+			"Taxes": 4597,
+			"Net Income": 23434
+		)
+	),
+)
+#sankey(
 	(
 		"iPhone": (
 			"Products": 44582
@@ -742,9 +833,8 @@ Label drawer
 		)
 	),
 	layout: auto-linear-layout(
-		layers: (
-			"Services": 1,
-		)
+		radius: 0,
+		vertical: true
 	)
 )
 
@@ -949,5 +1039,4 @@ Label drawer
 )
 
 // TODO: size overrides
-// TODO: custom labels
 // TODO: style overrides
