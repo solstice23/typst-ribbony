@@ -27,14 +27,14 @@
 			tmp-layer.insert(node-id, layer)
 			min-layer = calc.min(min-layer, layer)
 			visited.insert(node-id, true)
-			for (to-node-id, size) in nodes.at(node-id).edges {
-				if (visited.at(to-node-id, default: false) == false) {
-					queue.push((node-id: to-node-id, layer: layer + 1))
+			for (to, ..) in nodes.at(node-id).edges {
+				if (visited.at(to, default: false) == false) {
+					queue.push((node-id: to, layer: layer + 1))
 				}
 			}
-			for (from-node-id, size) in nodes.at(node-id).from-edges {
-				if (visited.at(from-node-id, default: false) == false) {
-					queue.push((node-id: from-node-id, layer: layer - 1))
+			for (from, size) in nodes.at(node-id).from-edges {
+				if (visited.at(from, default: false) == false) {
+					queue.push((node-id: from, layer: layer - 1))
 				}
 			}
 		}
@@ -64,39 +64,172 @@
 	return layers
 }
 
+/* Input Data Processing Functions */
+/*
+ * There are 3 supported input data formats:
+ * 1. Adjacency list: array of (from, to, size, ?([style]: , ..edge-attributes))
+ * 2. Adjacency matrix: (matrix: n*n array, ids: array of n node-ids)
+ * 3. Adjacency dictionary: ("node-id": outgoingEdges)
+ * 
+ * outgoingEdges = DetailedEdges | SimpleEdges
+ * DetailedEdges = array of (to: node-id, size: number, ([style]: , ..edge-attributes))
+ * SimpleEdges = a dict: ([to: node-id]: size)
+ * 
+ * The output of all preprocess-data functions is a dictionary:
+ * ([node-id]: DetailedEdges)
+ * Meanwhile, add nodes that defined implicitly by being a target of an edge
+ */
+
+#let is-adjacency-list = (data) => {
+	if (type(data) != array) {
+		return false
+	}
+	// adjacency list is the only array input type, so we don't check further, and can provide more detailed error messages later
+	return true
+}
+#let process-adjancy-list = (data) => {
+	let nodes = (:)
+	for edge in data {
+		assert(type(edge) == array, message: "Expected each edge to be a array")
+		assert(edge.len() >= 3, message: "Expected each edge to have at least 3 elements: (from, to, size, ?attrs)")
+		let (from, to, size) = (edge.at(0), edge.at(1), edge.at(2))
+		let attrs = edge.at(3, default: (:))
+		if (nodes.at(from, default: none) == none) {
+			nodes.insert(from, ())
+		}
+		if (nodes.at(to, default: none) == none) {
+			nodes.insert(to, ())
+		}
+		nodes.at(from).push((
+			to: to,
+			size: size,
+			..attrs
+		))
+	}
+	return nodes
+}
+#let is-adjacency-matrix = (data) => {
+	if (type(data) != dictionary) {
+		return false
+	}
+	if (data.at("matrix", default: none) == none or data.at("ids", default: none) == none) {
+		return false
+	}
+	if (type(data.at("matrix")) != array or type(data.at("ids")) != array) {
+		return false
+	}
+	return true
+}
+#let process-adjacency-matrix = (data) => {
+	let (matrix, ids) = data
+	let n = matrix.len()
+	assert(matrix.len() == n, message: "Expected square adjacency matrix")
+	for row in matrix {
+		assert(type(row) == array, message: "Expected each row of adjacency matrix to be an array")
+		assert(row.len() == n, message: "Expected square adjacency matrix")
+	}
+	assert(ids.len() == n, message: "Expected ids array length to match adjacency matrix size")
+	let nodes = (:)
+	for i in range(0, n) {
+		let from = ids.at(i)
+		nodes.insert(from, ())
+		for j in range(0, n) {
+			let to = ids.at(j)
+			let size = matrix.at(i).at(j)
+			if (size > 0) {
+				nodes.at(from).push((
+					to: to,
+					size: size
+				))
+			}
+		}
+	}
+	return nodes
+}
+#let process-adjacency-dictionary = (data) => {
+	let nodes = (:)
+	for (from, edges) in data {
+		nodes.insert(from, ())
+		assert(type(edges) == dictionary or type(edges) == array, message: "Expected edges to be a dictionary or an array")
+		if (type(edges) == dictionary) {
+			// SimpleEdges
+			for (to, size) in edges {
+				if (nodes.at(to, default: none) == none) {
+					nodes.insert(to, ())
+				}
+				nodes.at(from).push((
+					to: to,
+					size: size
+				))
+			}
+		} else {
+			// DetailedEdges
+			for edge in edges {
+				assert(type(edge) == dictionary, message: "Expected each edge to be a dictionary")
+				let (to, size, ..attrs) = edge
+				if (nodes.at(to, default: none) == none) {
+					nodes.insert(to, ())
+				}
+				nodes.at(from).push((
+					to: to,
+					size: size,
+					..attrs
+				))
+			}
+		}
+	}
+	return nodes
+}
+
+// Merge duplicated edges and return two adjacency dictionarys in which edges are SimpleEdges
+// return (merged-out-edges, merged-in-edges)
+// Useful for some types of layouts (e.g. undirected circular layout)
+#let merge-duplicated-edges = (nodes) => {
+	let merged-out-edges = (:)
+	let merged-in-edges = (:)
+	for (node-id, properties) in nodes {
+		merged-out-edges.insert(node-id, (:))
+		merged-in-edges.insert(node-id, (:))
+		for (to, size, ..) in properties.edges {
+			merged-out-edges.at(node-id).insert(to, merged-out-edges.at(node-id).at(to, default: 0) + size)
+		}
+		for (from, size, ..) in properties.from-edges {
+			merged-in-edges.at(node-id).insert(from, merged-in-edges.at(node-id).at(from, default: 0) + size)
+		}
+	}
+	return (merged-out-edges, merged-in-edges)
+}
+
 
 #let preprocess-data = (
 	data,
 	aliases,
 	categories
 ) => {
-	// Add nodes that defined implicitly by being a target of an edge
-	assert(type(data) == dictionary, message: "Expected a dictionary")
-	for (node-id, edges) in data {
-		if ((type(edges) == array and edges.len() == 0) or edges == none) {
-			edges = (:)
-		}
-		assert(type(edges) == dictionary, message: "Expected a dictionary of dictionaries")
-		for target in edges.keys() {
-			if (data.at(target, default: none) == none) {
-				data.insert(target, (:))
-			}
-		}
+	// Preprocess edges, standarize to DetailedEdges
+	if (is-adjacency-list(data)) {
+		data = process-adjancy-list(data)
+	} else if (is-adjacency-matrix(data)) {
+		data = process-adjacency-matrix(data)
+	} else {
+		data = process-adjacency-dictionary(data)
 	}
 
 	// Make edges dictionaries one of the attributes
 	for (node-id, edges) in data {
 		data.insert(node-id, (
 			edges: edges,
-			from-edges: (:)
+			from-edges: ()
 		))
 	}
+
 	// Add from-edges
 	for (node-id, properties) in data {
-		for (to, size) in properties.edges {
-			data.at(to).from-edges.insert(node-id, size)
+		for (to, ..attrs) in properties.edges {
+			data.at(to).from-edges.push(("from": node-id, ..attrs))
 		}
 	}
+
 	// Add id (same as key) and name (alias | id)
 	for (node-id, properties) in data {
 		data.at(node-id).insert("id", node-id)
@@ -121,19 +254,11 @@
 		counter += 1
 	}
 
-
 	// Add other necessary attributes to nodes
 	// in-size and out-size: sum of incoming and outgoing edge sizes
-	let in-size = (:)
 	for (node-id, properties) in data {
-		for (to, size) in properties.edges {
-			in-size.insert(to, in-size.at(to, default: 0) + size)
-		}
-	}
-	for (node-id, properties) in data {
-		let out-size = properties.edges.values().sum(default: 0)
-		data.at(node-id).insert("in-size", in-size.at(node-id, default: 0))
-		data.at(node-id).insert("out-size", out-size)
+		data.at(node-id).insert("in-size", properties.from-edges.map(edge => edge.size).sum(default: 0))
+		data.at(node-id).insert("out-size", properties.edges.map(edge => edge.size).sum(default: 0))
 	}
 
 	data
@@ -246,6 +371,7 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 	vertical: false,
 	layers: (:),
 	radius: 2pt,
+	curve-factor: 0.3,
 ) => {
 	let layer-override = layers
 	( layouter: (nodes) => {
@@ -312,7 +438,7 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 			for (node-id, properties) in nodes {
 				let y1 = properties.y
 				
-				for to in properties.edges.keys() {
+				for to in properties.edges.map(edge => edge.to).dedup() {
 					let y2 = nodes.at(to).y
 					let dy = y2 - y1
 					let dx = layer-gap
@@ -460,35 +586,33 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 				)
 
 				// sort ribbons first by slope to prevent crossing
-				let edges = ()
-				for (to-node-id, edge-size) in properties.edges {
-					edges.push((
-						to-node-id: to-node-id,
-						edge-size: edge-size,
-						slope: calc.atan2((nodes.at(to-node-id).y - y), (nodes.at(to-node-id).x - x))
-					))
+				let slopes = (:)
+				for to in properties.edges.map(edge => edge.to).dedup() {
+					slopes.insert(
+						to,
+						calc.atan2((nodes.at(to).y - y), (nodes.at(to).x - x))
+					)
 				}
-				edges = edges.sorted(key: it => it.slope)
+				let edges = properties.edges.sorted(key: it => slopes.at(it.to))
 
 				// ribbons
-				for (to-node-id, edge-size) in edges {
-					let to-properties = nodes.at(to-node-id)
+				for (to, size, ..attrs) in edges {
+					let to-properties = nodes.at(to)
 					let top-left = (x + width / 2, y + height / 2 - acc-out-size.at(node-id, default: 0) / properties.size * height)
-					let bottom-left = (top-left.at(0), top-left.at(1) - edge-size / properties.size * height)
-					let top-right = (to-properties.x - to-properties.width / 2, to-properties.y + to-properties.height / 2 - acc-in-size.at(to-node-id, default: 0) / to-properties.size * to-properties.height)
-					let bottom-right = (top-right.at(0), top-right.at(1) - edge-size / to-properties.size * to-properties.height)
-					acc-out-size.insert(node-id, acc-out-size.at(node-id, default: 0) + edge-size)
-					acc-in-size.insert(to-node-id, acc-in-size.at(to-node-id, default: 0) + edge-size)
+					let bottom-left = (top-left.at(0), top-left.at(1) - size / properties.size * height)
+					let top-right = (to-properties.x - to-properties.width / 2, to-properties.y + to-properties.height / 2 - acc-in-size.at(to, default: 0) / to-properties.size * to-properties.height)
+					let bottom-right = (top-right.at(0), top-right.at(1) - size / to-properties.size * to-properties.height)
+					acc-out-size.insert(node-id, acc-out-size.at(node-id, default: 0) + size)
+					acc-in-size.insert(to, acc-in-size.at(to, default: 0) + size)
 
 					let ribbon-width = calc.min(top-left.at(1) - bottom-left.at(1), top-right.at(1) - bottom-right.at(1))
 
-					let curve-factor = 0.3
 					let bezier-top-control-1 = point-translate(top-left, (curve-factor * (top-right.at(0) - top-left.at(0)), 0))
 					let bezier-top-control-2 = point-translate(top-right, (-curve-factor * (top-right.at(0) - top-left.at(0)), 0))
 					let bezier-bottom-control-1 = point-translate(bottom-left, (curve-factor * (bottom-right.at(0) - bottom-left.at(0)), 0))
 					let bezier-bottom-control-2 = point-translate(bottom-right, (-curve-factor * (bottom-right.at(0) - bottom-left.at(0)), 0))
 					merge-path(
-						..ribbon-stylizer(properties.color, to-properties.color, node-id, to-node-id),
+						..ribbon-stylizer(properties.color, to-properties.color, node-id, to),
 						{
 							bezier(top-left, top-right, bezier-top-control-1, bezier-top-control-2)
 							line(top-right, bottom-right)
@@ -549,6 +673,10 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 			let in-acc-size = (:)
 			let out-acc-size = (:) // if undirected, only use out-acc-size
 			let drawn = (:) // drawn[from][to] = bool, for drawing undirected edges only once
+
+			// if undirected, we combine all out and in edges and use this instead
+			let (merged-out-edges, merged-in-edges) = merge-duplicated-edges(nodes)
+
 			for (node-id, properties) in nodes {
 				let angle = properties.angle
 				let node-arc = properties.arc
@@ -575,24 +703,24 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 				// content((x, y), text(properties.name, size: 8pt))
 
 				// ribbons
-				for (to-node-id, out-edge-size) in properties.edges {
+				for (to, out-edge-size) in merged-out-edges.at(node-id) {
 					if (not directed and (
-						drawn.at(node-id, default: (:)).at(to-node-id, default: false) or
-						drawn.at(to-node-id, default: (:)).at(node-id, default: false)
+						drawn.at(node-id, default: (:)).at(to, default: false) or
+						drawn.at(to, default: (:)).at(node-id, default: false)
 					)) {
 						continue
 					}
 
 
-					let to-properties = nodes.at(to-node-id)
+					let to-properties = nodes.at(to)
 					
 					let in-edge-size = if (directed) { out-edge-size } else {
-						to-properties.edges.at(node-id, default: 0)
+						merged-in-edges.at(node-id).at(to, default: 0)
 					}
 
 					let from-acc-size = out-acc-size.at(node-id, default: 0)
-					let to-acc-size = if (directed) {in-acc-size.at(to-node-id, default: to-properties.size) }
-										else { out-acc-size.at(to-node-id, default: 0) }
+					let to-acc-size = if (directed) {in-acc-size.at(to, default: to-properties.size) }
+										else { out-acc-size.at(to, default: 0) }
 					let from-start-angle = angle - node-arc / 2 + (from-acc-size / properties.size * node-arc)
 					let from-end-angle = angle - node-arc / 2 + ((from-acc-size + out-edge-size) / properties.size * node-arc)
 					let to-start-angle = to-properties.angle - to-properties.arc / 2 + ((to-acc-size - in-edge-size) / to-properties.size * to-properties.arc)
@@ -601,9 +729,9 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 						to-start-angle = to-properties.angle - to-properties.arc / 2 + (to-acc-size / to-properties.size * to-properties.arc)
 						to-end-angle = to-properties.angle - to-properties.arc / 2 + ((to-acc-size + in-edge-size) / to-properties.size * to-properties.arc)
 						if (drawn.at(node-id, default: none) == none) { drawn.insert(node-id, (:)) }
-						drawn.at(node-id).insert(to-node-id, true)
-						if (drawn.at(to-node-id, default: none) == none) { drawn.insert(to-node-id, (:)) }
-						drawn.at(to-node-id).insert(node-id, true)
+						drawn.at(node-id).insert(to, true)
+						if (drawn.at(to, default: none) == none) { drawn.insert(to, (:)) }
+						drawn.at(to).insert(node-id, true)
 					}
 
 					let from-left = (radius * calc.cos(from-start-angle), radius * calc.sin(from-start-angle))
@@ -615,15 +743,15 @@ A Tinter returns a function, Nodes -> Palette -> Nodes
 
 					out-acc-size.insert(node-id, from-acc-size + out-edge-size)
 					if (directed) {
-						in-acc-size.insert(to-node-id, to-acc-size - in-edge-size)
-					} else if (node-id != to-node-id) {
-						out-acc-size.insert(to-node-id, to-acc-size + in-edge-size)
+						in-acc-size.insert(to, to-acc-size - in-edge-size)
+					} else if (node-id != to) {
+						out-acc-size.insert(to, to-acc-size + in-edge-size)
 					}
 
 					
 					merge-path(
 						..ribbon-stylizer(
-							properties.color, to-properties.color, node-id, to-node-id,
+							properties.color, to-properties.color, node-id, to,
 							angle: -calc.atan2(to-center.at(0) - from-center.at(0), to-center.at(1) - from-center.at(1))
 						),
 						{
@@ -740,17 +868,34 @@ Label drawer
 	categories: (:),
 	layout: auto-linear-layout(),
 	tinter: default-tinter(),
-	ribbon-color: ribbon-stylizer.default(),
+	ribbon-stylizer: ribbon-stylizer.default(),
 	draw-label: default-linear-label-drawer(),
 ) => {
 	let nodes = preprocess-data(data, aliases, categories)
+	// repr(nodes)
 	//repr(assign-layers(nodes))
 	let (layouter, drawer) = layout
 	nodes = layouter(nodes)
 	nodes = tinter(nodes)
 	// repr(nodes)
-	drawer(nodes, ribbon-color, draw-label)
+	drawer(nodes, ribbon-stylizer, draw-label)
 }
+
+#sankey(
+	(
+		("A", "B", 2),
+		("A", "B", 3),
+		("A", "C", 3),
+		("B", "D", 2),
+		("B", "E", 4),
+		("C", "D", 3),
+		("C", "E", 4),
+		("E", "F", 2),
+	),
+	ribbon-stylizer: ribbon-stylizer.gradient-from-to(
+		stroke-width: 0.2pt,
+	)
+)
 
 
 #sankey(
@@ -995,7 +1140,7 @@ Label drawer
 			"District heating": 79
 		)
 	),
-	ribbon-color: ribbon-stylizer.gradient-from-to()
+	ribbon-stylizer: ribbon-stylizer.gradient-from-to()
 )
 
 #sankey(
@@ -1014,7 +1159,7 @@ Label drawer
 	),
 	layout: circular-layout(directed: true),
 	// tinter: node-tinter()
-	ribbon-color: ribbon-stylizer.gradient-from-to()
+	ribbon-stylizer: ribbon-stylizer.gradient-from-to()
 )
 
 
@@ -1024,6 +1169,24 @@ Label drawer
 		"blond": ("black": 1951, "blond": 10048, "brown": 2060, "red": 6171), 
 		"brown": ("black": 8010, "blond": 16145, "brown": 8090, "red": 8045), 
 		"red": ("black": 1013, "blond": 990, "brown": 940, "red": 6907)  
+	),
+	layout: circular-layout(),
+	tinter: dict-tinter((
+		"black": rgb("#000000"),
+		"blond": rgb("#ffdd89"),
+		"brown": rgb("#957244"),
+		"red": rgb("#f26223"),
+	))
+)
+#sankey(
+	(
+		matrix: (
+			(11975, 5871, 8916, 2868), 
+			(1951, 10048, 2060, 6171), 
+			(8010, 16145, 8090, 8045), 
+			(1013, 990, 940, 6907)
+		),
+		ids: ("black", "blond", "brown", "red")
 	),
 	layout: circular-layout(),
 	tinter: dict-tinter((
