@@ -35,6 +35,7 @@
 			nodes.insert(to, ())
 		}
 		nodes.at(from).push((
+			from: from,
 			to: to,
 			size: size,
 			..attrs
@@ -72,6 +73,7 @@
 			let size = matrix.at(i).at(j)
 			if (size > 0) {
 				nodes.at(from).push((
+					from: from,
 					to: to,
 					size: size
 				))
@@ -88,23 +90,24 @@
 		if (type(edges) == dictionary) {
 			// SimpleEdges
 			for (to, size) in edges {
-                let sizes = if (type(size) == array) {
-                    size
-                } else if (type(size) == int or type(size) == float) {
-                    (size, )
-                } else {
-                    panic("Edge size must be a number or an array of numbers", repr(size))
-                }
+				let sizes = if (type(size) == array) {
+					size
+				} else if (type(size) == int or type(size) == float) {
+					(size, )
+				} else {
+					panic("Edge size must be a number or an array of numbers", repr(size))
+				}
 
 				if (nodes.at(to, default: none) == none) {
 					nodes.insert(to, ())
 				}
-                for size in sizes {
-                    nodes.at(from).push((
-                        to: to,
-                        size: size
-                    ))
-                }
+				for size in sizes {
+						nodes.at(from).push((
+							from: from,
+							to: to,
+							size: size
+						))
+				}
 			}
 		} else {
 			// DetailedEdges
@@ -115,6 +118,7 @@
 					nodes.insert(to, ())
 				}
 				nodes.at(from).push((
+					from: from,
 					to: to,
 					size: size,
 					..attrs
@@ -169,8 +173,9 @@
 
 	// Add from-edges
 	for (node-id, properties) in data {
-		for (to, ..attrs) in properties.edges {
-			data.at(to).from-edges.push(("from": node-id, ..attrs))
+		for edge in properties.edges {
+			let to = edge.to
+			data.at(to).from-edges.push(edge)
 		}
 	}
 
@@ -251,8 +256,15 @@
 		}
 	}
 	// Apply layer override
-	for (node-id, layer) in layer-override {
-		layer-dict.insert(node-id, layer)
+	for (layer, node-ids) in layer-override {
+		layer = int(layer)
+		if (not type(node-ids) == array) {
+			node-ids = (node-ids, )
+		}
+		for node-id in node-ids {
+			layer-dict.insert(node-id, layer)
+			max-layer = calc.max(max-layer, layer)
+		}
 	}
 
 	// Collect nodes in layers

@@ -1,7 +1,7 @@
 #import "./palette.typ"
 
 #let layer-tinter = (
-	palette: palette.default-palette
+	palette: palette.default
 ) => {
 	(nodes) => {
 		for (node-id, properties) in nodes {
@@ -15,7 +15,7 @@
 }
 
 #let categorical-tinter = (
-	palette: palette.default-palette
+	palette: palette.default
 ) => {
 	(nodes) => {
 		let categories = ()
@@ -39,7 +39,7 @@
 }
 
 #let node-tinter = (
-	palette: palette.default-palette
+	palette: palette.default
 ) => {
 	(nodes) => {
 		for (node-id, properties) in nodes {
@@ -52,15 +52,26 @@
 }
 #let dict-tinter = (
 	color-map,
-	override: none
+	override-on: none
 ) => {
 	assert(type(color-map) == dictionary, message: "Expected a dictionary for color-map")
 	(nodes) => {
-		if (override != none) {
-			nodes = override(nodes)
+		if (override-on != none) {
+			nodes = override-on(nodes)
 		}
 		for (node-id, properties) in nodes {
-			let color = color-map.at(node-id, default: if (override == none) { palette.default-palette.at(0) } else { nodes.at(node-id).color })
+			let color = color-map.at(node-id, default: if (override-on == none) { palette.default.at(0) } else { nodes.at(node-id).color })
+			nodes.at(node-id).insert("color", color)
+		}
+		return nodes
+	}
+}
+
+#let constant-tinter = (
+	color: palette.default.at(0)
+) => {
+	(nodes) => {
+		for (node-id, properties) in nodes {
 			nodes.at(node-id).insert("color", color)
 		}
 		return nodes
@@ -68,7 +79,7 @@
 }
 
 #let default-tinter = (
-	palette: palette.default-palette
+	palette: palette.default
 ) => {
 	// choose layer tinter if layers exist, otherwise node tinter
 	(nodes) => {

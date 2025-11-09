@@ -2,18 +2,16 @@
 
 A library for creating ribbon diagrams, such as Sankey and Chord diagrams, in Typst.
 
-Status: Early development.
-
-After finishing core features and documentation, this library will be published as a Typst package.
-
 typst-ribbons is based on [cetz](https://github.com/cetz-package/cetz).
+
+## Manual
+
+Read [manual](docs/manual.pdf) for documentation and examples.
 
 ## Demo
 
-Screenshots from WIP demos:
+Demo code is available in [gallery/demo.typ](gallery/demo.typ).
 
-![screenshot](demo.png)
+![demo](gallery/demo.svg)
 
-![screenshot](demo2.png)
-
-Demo data comes from SankeyMatic and d3-chord.
+Demo data source can be found in the [manual](docs/manual.pdf).

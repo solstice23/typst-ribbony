@@ -13,11 +13,12 @@ Label drawers
 		fill: white.transparentize(50%),
 		radius: 2pt
 	),
-	draw-content: (properties) => {[
+	draw-content: (properties, formatter: (val) => val) => [
 		#set par(leading: 0.5em)
 		#text(properties.name, size: 0.8em) \
-		#text(str(properties.size), size: 1em)
-	]}
+		#text(str(formatter(properties.size)), size: 1em)
+	],
+	formatter: (val) => val
 ) => {
 	(
 		node-name,
@@ -85,7 +86,7 @@ Label drawers
 					else { horizon }
 				)
 				#box(..styles)[
-					#draw-content(properties)
+					#draw-content(properties, formatter: formatter)
 				]
 			]
 		)
@@ -100,39 +101,41 @@ Label drawers
 		fill: white.transparentize(50%),
 		radius: 2pt
 	),
-	draw-content: (properties) => {[
+	draw-content: (properties, formatter: (val) => val) => [
 		#set par(leading: 0.5em)
 		#text(properties.name, size: 0.8em) \
-		#text(str(properties.size), size: 1em)
+		#text(str(formatter(properties.size)), size: 1em)
         // #text(repr(properties))
-	]}
+	],
+	formatter: (val) => val
 ) => {
 	(
 		node-name,
 		properties,
-        radius: 4,
-        node-width: 0.5,
-        directed: false,
+		radius: 4,
+		node-width: 0.5,
+		directed: false,
 		..args
 	) => {
 		import cetz.draw: *
 
-        set-transform(cetz.matrix.mul-mat(
-            cetz.matrix.transform-rotate-z(-properties.angle + 90deg),
-            cetz.matrix.transform-scale((1, -1))
-        ))
+		set-transform(cetz.matrix.mul-mat(
+				cetz.matrix.transform-rotate-z(-properties.angle + 90deg),
+				cetz.matrix.transform-scale((1, -1))
+		))
+	
 		content(
 			anchor: "center", (rel: (0, offset), to: (0, radius + node-width)),
 			box()[
 				#set align(center + horizon)
 				#box(..styles)[
-					#draw-content(properties)
+					#draw-content(properties, formatter: formatter)
 				]
 			]
 		)
         
-        set-transform(cetz.matrix.mul-mat(
-            cetz.matrix.transform-scale((1, -1))
-        ))
+		set-transform(cetz.matrix.mul-mat(
+				cetz.matrix.transform-scale((1, -1))
+		))
 	}
 }

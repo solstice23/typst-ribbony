@@ -1,11 +1,12 @@
 #import "@preview/cetz:0.4.2"
 
 #import "./data-processing.typ": assign-layers, merge-duplicated-edges
+#import "./ribbon-stylizer.typ": edge-overriding-styles
 #import "./utils.typ"
 
 #let auto-linear = (
 	layer-gap: 2,
-	node-gap: 1.5,
+	node-gap: 1,
 	node-width: 0.25,
 	base-node-height: 3,
 	min-node-height: 0.1,
@@ -242,7 +243,7 @@
 
 				// ribbons
 				for edge in edges {
-                    let (to, size, ..attrs) = edge
+                    let (to, size, ..) = edge
 					let to-properties = nodes.at(to)
 					let top-left = (x + width / 2, y + height / 2 - acc-out-size.at(node-id, default: 0) / properties.size * height)
 					let bottom-left = (top-left.at(0), top-left.at(1) - size / properties.size * height)
@@ -259,14 +260,8 @@
 					let bezier-bottom-control-2 = utils.point-translate(bottom-right, (-curve-factor * (bottom-right.at(0) - bottom-left.at(0)), 0))
 					merge-path(
                         ..utils.dict-merge(
-						    ribbon-stylizer(properties.color, to-properties.color, node-id, to),
-                            if (attrs.at("styles", default: none) == none) { (:) } else if (type(attrs.styles) == dictionary) {
-                                attrs.styles
-                            } else if (type(attrs.styles) == function) {
-                                (attrs.styles)(edge, properties, to, to-properties)
-                            } else {
-                                panic("Invalid styles attribute for edge from " + node-id + " to " + to, repr(attrs.styles))
-                            }
+						    ribbon-stylizer(edge, properties.color, to-properties.color, nodes.at(node-id), nodes.at(to), angle: if (vertical) { 90deg } else { 0deg }),
+                            edge-overriding-styles(edge, nodes)
                         ),
 						{
 							bezier(top-left, top-right, bezier-top-control-1, bezier-top-control-2)
@@ -425,8 +420,8 @@
 						out-acc-size.insert(to, to-acc-size + in-edge-size)
 					}
 
-                    let attrs = if (not directed) {
-                        (from: node-id, to: to, out-size: out-edge-size, in-size: in-edge-size)
+                    let structured-edge = if (not directed) {
+                        (from: node-id, to: to, size: (out-edge-size, in-edge-size))
                     } else {
                         edge
                     }
@@ -434,21 +429,20 @@
 					merge-path(
                         ..utils.dict-merge(
 						    ribbon-stylizer(
-                                properties.color, to-properties.color, node-id, to,
+                                structured-edge,
+                                properties.color, to-properties.color, nodes.at(node-id), nodes.at(to),
                                 angle: -calc.atan2(to-center.at(0) - from-center.at(0), to-center.at(1) - from-center.at(1))
                             ),
-                            if (attrs.at("styles", default: none) == none) { (:) } else if (type(attrs.styles) == dictionary) {
-                                attrs.styles
-                            } else if (type(attrs.styles) == function) {
-                                (attrs.styles)(attr, properties, to, to-properties)
-                            } else {
-                                panic("Invalid styles attribute for edge from " + node-id + " to " + to, repr(attrs.styles))
-                            }
+                            edge-overriding-styles(structured-edge, nodes)
                         ),
 						{
-							arc-through(from-left, from-center, from-right)
+                            if (out-edge-size > 0) {
+							    arc-through(from-left, from-center, from-right)
+                            }
 							bezier(from-right, to-left, (0, 0))
-							arc-through(to-left, to-center, to-right)
+                            if (in-edge-size > 0) {
+							    arc-through(to-left, to-center, to-right)
+                            }
 							bezier(to-right, from-left, (0, 0))
 						}
 					)

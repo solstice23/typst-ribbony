@@ -10,18 +10,22 @@
 	categories: (:),
 	layout: layout.auto-linear(),
 	tinter: tinter.default-tinter(),
-	ribbon-stylizer: ribbon-stylizer.default(),
+	ribbon-stylizer: ribbon-stylizer.match-from(),
 	draw-label: none,
+	debug: false,
 ) => {
 	let nodes = data-processing.preprocess-data(data, aliases, categories)
 
-	// repr(nodes)
+	if (debug == 1) { repr(nodes) }
      
 	let (layouter, drawer) = layout
 	nodes = layouter(nodes)
+
+	if (debug == 2) {	repr(nodes) }
+
 	nodes = tinter(nodes)
 
-	// repr(nodes)
+	if (debug == 3) { repr(nodes) }
 
 	drawer(nodes, ribbon-stylizer, draw-label)
 }
@@ -32,7 +36,7 @@
     categories: (:),
     layout: layout.auto-linear(),
     tinter: tinter.default-tinter(),
-    ribbon-stylizer: ribbon-stylizer.default(),
+    ribbon-stylizer: ribbon-stylizer.match-from(),
     draw-label: label.default-linear-label-drawer(),
     ..args
 ) => ribbon-diagram(
@@ -52,7 +56,7 @@
 	categories: (:),
 	layout: layout.circular(),
 	tinter: tinter.default-tinter(),
-	ribbon-stylizer: ribbon-stylizer.default(),
+	ribbon-stylizer: ribbon-stylizer.gradient-from-to(),
 	draw-label: label.default-circular-label-drawer(),
     ..args
 ) => ribbon-diagram(
