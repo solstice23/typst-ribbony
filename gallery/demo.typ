@@ -1,5 +1,4 @@
 #import "../src/ribbons.typ": *
-#import "../src/palette.typ"
 
 #set align(center)
 #set page(width: 20cm, height: 36.5cm, margin: (x: 0.5cm, y: 0.5cm))
@@ -139,7 +138,7 @@
 			"7": ("Losses", "Over generation / exports", "Heating and cooling - homes", "Heating and cooling - commercial", "Lighting & appliances - homes", "Lighting & appliances - commercial", "Industry", "Road transport", "Rail transport", "International aviation", "Domestic aviation", "International shipping", "National navigation", "Agriculture")
 		)
 	),
-	tinter: tinter.layer-tinter(palette: palette.catppuccin),
+	tinter: tinter.layer-tinter(palette: tinter.palette.catppuccin),
 	ribbon-stylizer: ribbon-stylizer.gradient-from-to(),
 	draw-label: label.default-linear-label-drawer(
 		width-limit: false,
