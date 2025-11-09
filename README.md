@@ -1,8 +1,8 @@
-# typst-ribbons
+# typst-ribbony
 
 A library for creating ribbon diagrams, such as Sankey and Chord diagrams, in Typst.
 
-typst-ribbons is based on [cetz](https://github.com/cetz-package/cetz).
+typst-ribbony is based on [cetz](https://github.com/cetz-package/cetz).
 
 More diagrams (layouts) are planned to be added in the future.
 
