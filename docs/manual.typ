@@ -1711,7 +1711,7 @@ Internally, an edge is represented as a dictionary with the following keys:
 - `from`: The id of the source node.
 - `to`: The id of the target node.
 - `size`: The size of the edge. If it is an undirected edge, it will be the a array of two numbers, representing the size in both directions.
-- ..other-attrs: Any other custom attributes defined in the adjacency list's `edge-attrs` dictionary will also be included here. `style` is a special attribute that will be used for edge style override in drawing process.
+- `..other-attrs`: Any other custom attributes defined in the adjacency list's `edge-attrs` dictionary will also be included here. `style` is a special attribute that will be used for edge style override in drawing process.
 
 #def
 ```
