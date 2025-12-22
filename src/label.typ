@@ -5,7 +5,7 @@ Label drawers
 */
 
 #let default-linear-label-drawer = (
-	snap: auto,
+	snap: "io-auto", // "io-auto" | auto | align
 	offset: auto, // auto | (x, y)
 	width-limit: auto, // auto | false | value,
 	styles: (
@@ -33,7 +33,17 @@ Label drawers
 
 		let snap = if (_snap == auto) {
 			if (vertical-layout) { bottom } else { right }
-		} else {
+		} else if (_snap == "io-auto") {
+            let incoming = properties.from-edges.len() > 0
+            let outgoing = properties.edges.len() > 0
+            if (incoming and not outgoing) {
+                if (vertical-layout) { bottom } else { right }
+            } else if (outgoing and not incoming) {
+                if (vertical-layout) { top } else { left }
+            } else {
+                center
+            }
+        } else {
 			_snap
 		}
 

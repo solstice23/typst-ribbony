@@ -395,7 +395,7 @@ Adjacency Matrix = dict<
 ```
 In this example, the `6000` at row 2 column 3 indicates an edge from `Europe` to `Americas` with size `6000`.
 
-== Behind the scene
+== Behind the scenes
 
 Internally, all data formats will be converted to a new format for easier processing. The document doesn't list this for now. If you want to know more about this, pass `debug: 1` to `ribbony-diagram` function to see the structure of pre-processed data.
 
@@ -1355,9 +1355,10 @@ label-drawer = (node-name: string, properties: dict, ..extra-params) -> CetZ-con
 The default label drawer for linear layout. It is the labels you've seen in the previous sankey examples.
 
 #params("label-drawer.default-linear-label-drawer", "label-drawer", (
-	( "snap", ("auto", "align"), false, `auto`, [
+	( "snap", ("\"io-auto\"", "auto", "align"), false, `"io-auto"`, [
 		Where to snap the label to the node. For horizontal layout, accepts `left`, `center`, `right`. For vertical layout, accepts `top`, `center`, `bottom`.\
-		If set to `auto`, it will choose `right` for horizontal layout and `bottom` for vertical layout.		
+		If set to `auto`, it will choose `right` for horizontal layout and `bottom` for vertical layout. \
+		If set to `"io-auto"`, it will choose `left`/`top` for nodes with only outgoing edges, `right`/`bottom` for nodes with only incoming edges, and `center` for nodes with both incoming and outgoing edges.
 	]),
 	( "offset", ("auto", "CetZ-coord"), false, `auto`, [
 		The offset of the label from the snap position. If set to `auto`, it will offset the label a small distance away from the node.
