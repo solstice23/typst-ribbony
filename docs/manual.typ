@@ -132,7 +132,9 @@
 
 
 #align(center)[
+	#v(-2em)
   #text(size: 30pt)[*typst-ribbony*]
+	#v(-1em)
   
   #text(size: 14pt)[Manual]
   
@@ -1358,7 +1360,7 @@ The default label drawer for linear layout. It is the labels you've seen in the 
 	( "snap", ("\"io-auto\"", "auto", "align"), false, `"io-auto"`, [
 		Where to snap the label to the node. For horizontal layout, accepts `left`, `center`, `right`. For vertical layout, accepts `top`, `center`, `bottom`.\
 		If set to `auto`, it will choose `right` for horizontal layout and `bottom` for vertical layout. \
-		If set to `"io-auto"`, it will choose `left`/`top` for nodes with only outgoing edges, `right`/`bottom` for nodes with only incoming edges, and `center` for nodes with both incoming and outgoing edges.
+		If set to `"io-auto"`, it will choose `right`/`bottom` for nodes with only outgoing edges, `left`/`top` for nodes with only incoming edges, and `center` for nodes with both incoming and outgoing edges.
 	]),
 	( "offset", ("auto", "CetZ-coord"), false, `auto`, [
 		The offset of the label from the snap position. If set to `auto`, it will offset the label a small distance away from the node.
@@ -1753,3 +1755,22 @@ An undirected edge (e.g. used in circular layout with `directed: false`):
 	size: (5, 15), // 5 from A to B, 15 from B to A
 )
 ```
+
+= Changelog
+
+#v(0.5em)
+
+#let version-title = (ver) => [
+	#set text(size: 1.2em, weight: "bold")
+	v#ver
+	#v(-0.5em)
+]
+
+#version-title("0.1.1")
+
+- Added `"io-auto"` option for `snap` parameter in `label-drawer.default-linear-label-drawer` as the new default, which automatically chooses the best snap position based on the node's incoming and outgoing edges.
+
+
+#version-title("0.1.0")
+
+- First version.
