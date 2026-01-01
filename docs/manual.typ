@@ -1805,7 +1805,7 @@ An undirected edge (e.g. used in circular layout with `directed: false`):
 #version-title("0.1.1")
 
 - Added `"io-auto"` option for `snap` parameter in `label-drawer.default-linear-label-drawer` as the new default, which automatically chooses the best snap position based on the node's incoming and outgoing edges.
-
+- Added the `#void` node as a "hidden node" that can be used to override/customize the sizes of nodes.
 
 #version-title("0.1.0")
 
