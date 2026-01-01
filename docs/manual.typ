@@ -132,8 +132,8 @@
 
 
 #align(center)[
-	#v(-2em)
-  #text(size: 30pt)[*typst-ribbony*]
+	#v(-3em)
+  #text(size: 28pt)[*typst-ribbony*]
 	#v(-1em)
   
   #text(size: 14pt)[Manual]
@@ -143,7 +143,7 @@
   _A library for creating ribbony diagrams in Typst, such as Sankey and Chord diagrams._
 ]
 
-#v(-1em)
+#v(-0.8em)
 
 #text(size: 24pt, weight: "bold")[Content]
 #v(-10pt)
@@ -282,8 +282,8 @@ Takes the same parameters as `ribbony-diagram`, with different default values fo
 
 ```
 data = Adjacency List
-			| Adjacency Dictionary
-			| Adjacency Matrix
+		 | Adjacency Dictionary
+		 | Adjacency Matrix
 ```
 
 Different formats has their own advantages and disadvantages, however, some of them lack certain functoinalities. `Adjacency List` is the most complete format that supports all functionalities, while `Adjacency List` and `Adjacency Matrix` are more concise but lack support of some features (for example, only `Adjacency List` supports edge attributes, and only `Adjacency Dictionary` and `Adjacency List` support multiple edges between two nodes).
@@ -396,6 +396,42 @@ Adjacency Matrix = dict<
 )
 ```
 In this example, the `6000` at row 2 column 3 indicates an edge from `Europe` to `Americas` with size `6000`.
+
+== `#void` and Node Size Override
+
+In the sankey layout, the size of each node is calculated by $max("sum of incoming edge sizes", "sum of outgoing edge sizes")$. In some cases, you may want to customize the size of certain nodes, i.e. to discard some incoming or outgoing portions, for example:
+
+#sankey-diagram(
+	(
+		("Manufactured", "Sold", 800),
+		("Manufactured", "#void", 700),
+	)
+)
+
+To achieve this, you can use the `#void` node.
+
+`#void` is a special name that can be used in the data to achieve this. It acts as a "hidden node" that absorbs all incoming or outgoing edges without being displayed in the diagram. The edges connected to `#void` will still contribute to the size calculation of the connected nodes, but `#void` itself will not be rendered.
+
+
+The source code of the above example:
+```typc
+#sankey-diagram(
+	(
+		("Manufactured", "Sold", 800),
+		("Manufactured", "#void", 700),
+	)
+)
+```
+
+Or you can use `#void` as a source node too, it will give the same result:
+```typc
+#sankey-diagram(
+	(
+		("Manufactured", "Sold", 800),
+		("#void", "Manufactured", 1500),
+	)
+)
+```
 
 == Behind the scenes
 

@@ -210,6 +210,19 @@
 		data.at(node-id).insert("out-size", properties.edges.map(edge => edge.size).sum(default: 0))
 	}
 
+	// Drop #void node
+	data.insert("#void", (:))
+	data.remove("#void")
+
+	for (node-id, (edges, from-edges)) in data {
+		data.at(node-id).insert(
+			"edges", edges.filter(edge => edge.to != "#void")
+		)
+		data.at(node-id).insert(
+			"from-edges", from-edges.filter(edge => edge.from != "#void")
+		)
+	}
+
 	data
 }
 
