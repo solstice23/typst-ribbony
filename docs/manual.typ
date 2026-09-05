@@ -136,7 +136,7 @@
   #text(size: 28pt)[*typst-ribbony*]
 	#v(-1em)
   
-  #text(size: 14pt)[Manual]
+  #text(size: 14pt)[Manual - 0.1.1]
   
   #v(0.5em)
 
