@@ -2,7 +2,7 @@
 name = "ribbony"
 version = "0.1.1"
 entrypoint = "src/ribbony.typ"
-authors = ["@solstice23"]
+authors = ["solstice23 <https://github.com/solstice23>"]
 license = "MIT"
 description = "Create Sankey and Chord (ribbon-like) diagrams."
 repository = "https://github.com/solstice23/typst-ribbony"
