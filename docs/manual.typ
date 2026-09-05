@@ -1570,7 +1570,7 @@ We want to show text inside each nodes in the vertical linear layout, with the n
 		layer-gap: 1.5,
 	),
 	draw-label: (node-name, properties, ..) => {
-		import "@preview/cetz:0.4.2"
+		import "@preview/cetz:0.5.2"
 		import cetz.draw: *
 		
 		content(
